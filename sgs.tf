@@ -18,7 +18,7 @@ resource "aws_security_group" "eks_cluster" {
 resource "aws_security_group" "eks_node" {
   vpc_id = "${aws_vpc.main.id}"
   name = "eks_${var.eks_cluster_name}_node"
-  description = "Security Group for all EKS Nodes"
+  description = "Security Group for EKS Nodes"
   egress {
     from_port = 443
 	to_port = 443
@@ -26,6 +26,13 @@ resource "aws_security_group" "eks_node" {
 	cidr_blocks = [ "0.0.0.0/0" ]
   }
   tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "shared")}"
+}
+
+resource "aws_security_group" "eks_node_managed" {
+  vpc_id = "${aws_vpc.main.id}"
+  name = "eks_${var.eks_cluster_name}_node_managed"
+  description = "Security Group for EKS Nodes managed by cluster"
+  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "owned")}"
 }
 
 resource "aws_security_group" "eks_alb" {

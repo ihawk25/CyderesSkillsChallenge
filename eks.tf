@@ -95,7 +95,7 @@ resource "aws_launch_configuration" "eks_node" {
   image_id = "${var.eks_node_ami}"
   instance_type = "t2.small"
   iam_instance_profile = "${aws_iam_instance_profile.eks_node.name}"
-  security_groups = [ "${aws_security_group.eks_node.id}" ]
+  security_groups = [ "${aws_security_group.eks_node.id}", "${aws_security_group.eks_node_managed.id}" ]
   user_data_base64 = "${base64encode(local.eks_node_userdata)}"
 
   lifecycle { create_before_destroy = true }
