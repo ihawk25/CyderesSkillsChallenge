@@ -15,9 +15,12 @@
 #--------------------------------------------------------------
 resource "aws_vpc" "main" {
   cidr_block = "${var.vpc_cidr}"
-  tags {
-    Name = "vpc-main"
-  }
+  tags = "${
+    map(
+      "Name", "vpc-main",
+      "kubernetes.io/cluster/${var.eks_cluster_name}", "shared"
+	)
+  }"
 }
 
 resource "aws_internet_gateway" "main" {
@@ -33,7 +36,7 @@ resource "aws_internet_gateway" "main" {
 resource "aws_vpc_dhcp_options" "dhcp" {
   domain_name = "foobar"
   domain_name_servers = ["AmazonProvidedDNS"]
-  tags = {
+  tags {
     Name = "dhcp-main"
   }
 }
@@ -60,9 +63,12 @@ resource "aws_subnet" "hybrid_subnets" {
   vpc_id = "${aws_vpc.main.id}"
   cidr_block = "${cidrsubnet(var.vpc_cidr, 3, count.index + 2)}"
   availability_zone = "${format("%s%s", var.aws_region, var.azs[count.index])}"
-  tags {
-    Name = "hybrid-${var.azs[count.index]}"
-  }
+  tags = "${
+    map(
+      "Name", "hybrid-${var.azs[count.index]}",
+      "kubernetes.io/cluster/${var.eks_cluster_name}", "shared"
+	)
+  }"
   count = "${length(var.azs)}"
 }
 
@@ -116,6 +122,12 @@ resource "aws_route_table_association" "dmz_rta" {
   subnet_id = "${element(aws_subnet.dmz_subnets.*.id, count.index)}"
   route_table_id = "${aws_route_table.dmz_rt.id}"
   count = "${length(var.azs)}"
+}
+
+resource "aws_route" "hybrid_igw" {
+  route_table_id = "${aws_route_table.hybrid_rt.id}"
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id = "${aws_internet_gateway.main.id}"
 }
 
 resource "aws_route" "dmz_igw" {
@@ -199,7 +211,7 @@ resource "aws_network_acl_rule" "hybrid_allow_vpc_ingress" {
   egress = false
   protocol = "all"
   rule_action = "allow"
-  cidr_block = "${var.vpc_cidr}"
+  cidr_block = "0.0.0.0/0"
 }
 
 resource "aws_network_acl_rule" "hybrid_allow_vpc_egress" {
@@ -208,7 +220,7 @@ resource "aws_network_acl_rule" "hybrid_allow_vpc_egress" {
   egress = true
   protocol = "all"
   rule_action = "allow"
-  cidr_block = "${var.vpc_cidr}"
+  cidr_block = "0.0.0.0/0"
 }
 
 #--------------------------------------------------------------
