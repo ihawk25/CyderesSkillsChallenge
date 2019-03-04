@@ -33,18 +33,6 @@ resource "aws_security_group" "eks_node" {
   tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "owned")}"
 }
 
-resource "aws_security_group" "eks_alb" {
-  vpc_id = "${aws_vpc.main.id}"
-  name = "eks_${var.eks_cluster_name}_alb"
-  description = "Security Group for ALB"
-  ingress {
-    from_port = 80
-	to_port = 80
-	protocol = "tcp"
-	cidr_blocks = [ "0.0.0.0/0" ]
-  }
-}
-
 resource "aws_security_group_rule" "node_ingress_self" {
   security_group_id = "${aws_security_group.eks_node.id}"
   description = "Allows nodes to communicate with each other"
@@ -73,26 +61,6 @@ resource "aws_security_group_rule" "node_ingress_cluster" {
   to_port = 65535
   protocol = "tcp"
   source_security_group_id = "${aws_security_group.eks_cluster.id}"
-}
-
-resource "aws_security_group_rule" "node_ingress_alb" {
-  security_group_id = "${aws_security_group.eks_node.id}"
-  description = "Allows nodes ingress from alb"
-  type = "ingress"
-  from_port = 80
-  to_port = 80
-  protocol = "tcp"
-  source_security_group_id = "${aws_security_group.eks_alb.id}"
-}
-
-resource "aws_security_group_rule" "alb_egress_node" {
-  security_group_id = "${aws_security_group.eks_alb.id}"
-  description = "Allows alb egress to nodes"
-  type = "egress"
-  from_port = 80
-  to_port = 80
-  protocol = "tcp"
-  source_security_group_id = "${aws_security_group.eks_node.id}"
 }
 
 resource "aws_security_group_rule" "eks_cluster_ingress_tony" {
