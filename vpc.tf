@@ -15,6 +15,7 @@
 #--------------------------------------------------------------
 resource "aws_vpc" "main" {
   cidr_block = "${var.vpc_cidr}"
+  enable_dns_hostnames = true
   tags = "${
     map(
       "Name", "vpc-main",
@@ -28,17 +29,6 @@ resource "aws_internet_gateway" "main" {
   tags {
     Name = "igw-main"
   }
-}
-
-resource "aws_eip" "hybrid_nat" {
-  vpc = true
-  count = "${length(aws_subnet.hybrid_subnets.*.id)}"
-}
-
-resource "aws_nat_gateway" "hybrid" {
-  subnet_id = "${element(aws_subnet.hybrid_subnets.*.id, count.index)}"
-  allocation_id = "${element(aws_eip.hybrid_nat.*.id, count.index)}"
-  count = "${length(var.azs)}"
 }
 
 #--------------------------------------------------------------
@@ -112,14 +102,17 @@ resource "aws_route_table_association" "private_rta" {
 resource "aws_route_table" "hybrid_rt" {
   vpc_id = "${aws_vpc.main.id}"
   tags {
-    Name = "hybrid-rt-${var.azs[count.index]}"
+    Name = "hybrid-rt"
   }
-  count = "${length(var.azs)}"
+  route {
+   cidr_block = "0.0.0.0/0"
+   gateway_id = "${aws_internet_gateway.main.id}"
+  }
 }
 
 resource "aws_route_table_association" "hybrid_rta" {
   subnet_id = "${element(aws_subnet.hybrid_subnets.*.id, count.index)}"
-  route_table_id = "${element(aws_route_table.hybrid_rt.*.id, count.index)}"
+  route_table_id = "${aws_route_table.hybrid_rt.id}"
   count = "${length(var.azs)}"
 }
 
@@ -128,24 +121,16 @@ resource "aws_route_table" "dmz_rt" {
   tags {
     Name = "dmz-rt"
   }
+  route {
+    cidr_block = "0.0.0.0/0"
+	gateway_id = "${aws_internet_gateway.main.id}"
+  }
 }
 
 resource "aws_route_table_association" "dmz_rta" {
   subnet_id = "${element(aws_subnet.dmz_subnets.*.id, count.index)}"
   route_table_id = "${aws_route_table.dmz_rt.id}"
   count = "${length(var.azs)}"
-}
-
-resource "aws_route" "hybrid_nat" {
-  route_table_id = "${element(aws_route_table.hybrid_rt.*.id, count.index)}"
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id = "${element(aws_nat_gateway.hybrid.*.id, count.index)}"
-}
-
-resource "aws_route" "dmz_igw" {
-  route_table_id = "${aws_route_table.dmz_rt.id}"
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id = "${aws_internet_gateway.main.id}"
 }
 
 #--------------------------------------------------------------

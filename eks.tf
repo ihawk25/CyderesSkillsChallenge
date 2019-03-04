@@ -12,6 +12,15 @@ data "template_file" "policy_ar_ec2" {
   vars { aws_service = "ec2" }
 }
 
+data "aws_ami" "eks_node" {
+  filter {
+    name = "name"
+    values = [ "amazon-eks-node-${aws_eks_cluster.eks.version}-v*" ]
+  }
+  most_recent = true
+  owners = [ "602401143452" ]
+}
+
 #--------------------------------------------------------------
 # IAM Roles
 #--------------------------------------------------------------
@@ -58,7 +67,7 @@ output "endpoint" {
   value = "${aws_eks_cluster.eks.endpoint}"
 }
 
-output "kube_cad" {
+output "certificate_authority_data" {
   value = "${aws_eks_cluster.eks.certificate_authority.0.data}"
 }
 
@@ -67,35 +76,62 @@ output "kube_cad" {
 #--------------------------------------------------------------
 locals {
   eks_node_userdata = <<EOF
-#!/bin/bash -xe
+#!/bin/bash
+set -o xtrace
+/etc/eks/bootstrap.sh --apiserver-endpoint '${aws_eks_cluster.eks.endpoint}' --b64-cluster-ca '${aws_eks_cluster.eks.certificate_authority.0.data}' '${var.eks_cluster_name}'
+EOF
+  config_map_aws_auth = <<EOF
 
-CA_CERTIFICATE_DIRECTORY=/etc/kubernetes/pki
-CA_CERTIFICATE_FILE_PATH=$CA_CERTIFICATE_DIRECTORY/ca.crt
-mkdir -p $CA_CERTIFICATE_DIRECTORY
-echo "${aws_eks_cluster.eks.certificate_authority.0.data}" | base64 -d >  $CA_CERTIFICATE_FILE_PATH
-INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
-sed -i s,MASTER_ENDPOINT,${aws_eks_cluster.eks.endpoint},g /var/lib/kubelet/kubeconfig
-sed -i s,CLUSTER_NAME,${var.eks_cluster_name},g /var/lib/kubelet/kubeconfig
-sed -i s,REGION,${var.aws_region},g /etc/systemd/system/kubelet.service
-sed -i s,MAX_PODS,20,g /etc/systemd/system/kubelet.service
-sed -i s,MASTER_ENDPOINT,${aws_eks_cluster.eks.endpoint},g /etc/systemd/system/kubelet.service
-sed -i s,INTERNAL_IP,$INTERNAL_IP,g /etc/systemd/system/kubelet.service
-DNS_CLUSTER_IP=10.100.0.10
-if [[ $INTERNAL_IP == 10.* ]] ; then DNS_CLUSTER_IP=172.20.0.10; fi
-sed -i s,DNS_CLUSTER_IP,$DNS_CLUSTER_IP,g /etc/systemd/system/kubelet.service
-sed -i s,CERTIFICATE_AUTHORITY_FILE,$CA_CERTIFICATE_FILE_PATH,g /var/lib/kubelet/kubeconfig
-sed -i s,CLIENT_CA_FILE,$CA_CERTIFICATE_FILE_PATH,g  /etc/systemd/system/kubelet.service
-systemctl daemon-reload
-systemctl restart kubelet
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    - rolearn: ${aws_iam_role.eks_node.arn}
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+EOF
+  kubeconfig = <<EOF
+
+
+apiVersion: v1
+clusters:
+- cluster:
+    server: ${aws_eks_cluster.eks.endpoint}
+    certificate-authority-data: ${aws_eks_cluster.eks.certificate_authority.0.data}
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: aws
+  name: aws
+current-context: aws
+kind: Config
+preferences: {}
+users:
+- name: aws
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1alpha1
+      command: aws-iam-authenticator
+      args:
+        - "token"
+        - "-i"
+        - "${var.eks_cluster_name}"
 EOF
 }
 
 resource "aws_launch_configuration" "eks_node" {
   name_prefix = "eks_${var.eks_cluster_name}_node"
-  image_id = "${var.eks_node_ami}"
+  image_id = "${data.aws_ami.eks_node.id}"
   instance_type = "t2.small"
   iam_instance_profile = "${aws_iam_instance_profile.eks_node.name}"
-  security_groups = [ "${aws_security_group.eks_node.id}", "${aws_security_group.eks_node_es.id}" ]
+  security_groups = [ "${aws_security_group.eks_node.id}" ]
   user_data_base64 = "${base64encode(local.eks_node_userdata)}"
 
   lifecycle { create_before_destroy = true }
@@ -111,13 +147,21 @@ resource "aws_autoscaling_group" "eks_node" {
   desired_capacity = 1
   tag {
     key = "Name"
-	value = "eks-${var.eks_cluster_name}-node"
-	propagate_at_launch = true
+    value = "eks-${var.eks_cluster_name}-node"
+    propagate_at_launch = true
   }
   tag {
     key = "kubernetes.io/cluster/${var.eks_cluster_name}"
-	value = "owned"
-	propagate_at_launch = true
+    value = "owned"
+    propagate_at_launch = true
   }
+}
+
+output "config_map_aws_auth" {
+  value = "${local.config_map_aws_auth}"
+}
+
+output "kubeconfig" {
+  value = "${local.kubeconfig}"
 }
 

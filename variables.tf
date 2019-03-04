@@ -21,10 +21,6 @@ variable "eks_cluster_name" {
   default = "foobar"
 }
 
-variable "eks_node_ami" {
-  default = "ami-0c28139856aaf9c3b"
-}
-
 #--------------------------------------------------------------
 # Network
 #--------------------------------------------------------------
