@@ -141,7 +141,6 @@ resource "aws_autoscaling_group" "eks_node" {
   name = "eks_${var.eks_cluster_name}_node"
   vpc_zone_identifier = [ "${aws_subnet.hybrid_subnets.*.id}" ]
   launch_configuration = "${aws_launch_configuration.eks_node.id}"
-  target_group_arns = [ "${aws_alb_target_group.eks_tg.arn}" ]
   min_size = 1
   max_size = 1
   desired_capacity = 1
