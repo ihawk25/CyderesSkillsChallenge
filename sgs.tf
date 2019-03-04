@@ -25,7 +25,7 @@ resource "aws_security_group" "eks_node" {
 	protocol = "tcp"
 	cidr_blocks = [ "0.0.0.0/0" ]
   }
-  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "owned")}"
+  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "shared")}"
 }
 
 resource "aws_security_group" "eks_alb" {
