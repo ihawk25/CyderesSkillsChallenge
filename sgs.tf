@@ -25,14 +25,14 @@ resource "aws_security_group" "eks_node" {
 	protocol = "tcp"
 	cidr_blocks = [ "0.0.0.0/0" ]
   }
-  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "shared")}"
+  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "owned")}"
 }
 
-resource "aws_security_group" "eks_node_managed" {
+resource "aws_security_group" "eks_node_es" {
   vpc_id = "${aws_vpc.main.id}"
-  name = "eks_${var.eks_cluster_name}_node_managed"
-  description = "Security Group for EKS Nodes managed by cluster"
-  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "owned")}"
+  name = "eks_${var.eks_cluster_name}_node_es"
+  description = "Security Group for EKS Nodes egress to ES"
+  tags = "${map("kubernetes.io/cluster/${var.eks_cluster_name}", "shared")}"
 }
 
 resource "aws_security_group" "eks_alb" {
@@ -67,6 +67,16 @@ resource "aws_security_group_rule" "node_ingress_cluster" {
   source_security_group_id = "${aws_security_group.eks_cluster.id}"
 }
 
+resource "aws_security_group_rule" "node_ingress_node" {
+  security_group_id = "${aws_security_group.eks_node.id}"
+  description = "Allows nodes to communicate with each other"
+  type = "ingress"
+  from_port = 0
+  to_port = 65535
+  protocol = "-1"
+  source_security_group_id = "${aws_security_group.eks_node.id}"
+}
+
 resource "aws_security_group_rule" "node_ingress_alb" {
   security_group_id = "${aws_security_group.eks_node.id}"
   description = "Allows nodes ingress from alb"
@@ -78,7 +88,7 @@ resource "aws_security_group_rule" "node_ingress_alb" {
 }
 
 resource "aws_security_group_rule" "node_egress_es" {
-  security_group_id = "${aws_security_group.eks_node.id}"
+  security_group_id = "${aws_security_group.eks_node_es.id}"
   description = "Allows node egress to es"
   type = "egress"
   from_port = 9200
@@ -94,7 +104,7 @@ resource "aws_security_group_rule" "es_ingress_node" {
   from_port = 9200
   to_port = 9200
   protocol = "tcp"
-  source_security_group_id = "${aws_security_group.eks_node.id}"
+  source_security_group_id = "${aws_security_group.eks_node_es.id}"
 }
 
 resource "aws_security_group_rule" "alb_egress_node" {
