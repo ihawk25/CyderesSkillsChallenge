@@ -1,0 +1,14 @@
+spec:
+  serviceAccountName: fluentd-service-account
+  tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  containers:
+  - name: fluentd
+    image: quay.io/fluent/fluentd-kubernetes-daemonset
+    env:
+      - name:  FLUENT_ELASTICSEARCH_HOST
+        value: "vpc-foobar-5ild3mgxqxxefqmi6c4itz7qiy.us-west-2.es.amazonaws.com"
+      - name:  FLUENT_ELASTICSEARCH_PORT
+        value: "443"
