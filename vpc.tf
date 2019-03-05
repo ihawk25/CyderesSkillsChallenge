@@ -15,6 +15,7 @@
 #--------------------------------------------------------------
 resource "aws_vpc" "main" {
   cidr_block = "${var.vpc_cidr}"
+  enable_dns_hostnames = true
   tags = "${
     map(
       "Name", "vpc-main",
@@ -103,6 +104,10 @@ resource "aws_route_table" "hybrid_rt" {
   tags {
     Name = "hybrid-rt"
   }
+  route {
+   cidr_block = "0.0.0.0/0"
+   gateway_id = "${aws_internet_gateway.main.id}"
+  }
 }
 
 resource "aws_route_table_association" "hybrid_rta" {
@@ -116,24 +121,16 @@ resource "aws_route_table" "dmz_rt" {
   tags {
     Name = "dmz-rt"
   }
+  route {
+    cidr_block = "0.0.0.0/0"
+	gateway_id = "${aws_internet_gateway.main.id}"
+  }
 }
 
 resource "aws_route_table_association" "dmz_rta" {
   subnet_id = "${element(aws_subnet.dmz_subnets.*.id, count.index)}"
   route_table_id = "${aws_route_table.dmz_rt.id}"
   count = "${length(var.azs)}"
-}
-
-resource "aws_route" "hybrid_igw" {
-  route_table_id = "${aws_route_table.hybrid_rt.id}"
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id = "${aws_internet_gateway.main.id}"
-}
-
-resource "aws_route" "dmz_igw" {
-  route_table_id = "${aws_route_table.dmz_rt.id}"
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id = "${aws_internet_gateway.main.id}"
 }
 
 #--------------------------------------------------------------
